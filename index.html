@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>正規表現 入力補助ツール</title>
+  <style>
+    :root{
+      --bg:#0b1020;         /* 深紺 */
+      --panel:#111732;      /* パネル */
+      --panel-2:#0e1430;    /* もう一段暗い */
+      --ink:#eaf0ff;        /* 文字 */
+      --sub:#a6b2d9;        /* サブ文字 */
+      --accent:#6ea8fe;     /* アクセント */
+      --accent-2:#89f7fe;   /* アクセント薄 */
+      --ok:#45df9e;         /* OK */
+      --bad:#ff6b6b;        /* NG */
+      --warn:#f9c74f;       /* 注意 */
+      --chip:#1a2146;       /* チップ */
+      --shadow:0 10px 30px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background: radial-gradient(1200px 800px at 10% -10%, #1c2756 0, transparent 40%),
+                            radial-gradient(900px 700px at 100% 10%, #15204b 0, transparent 35%),
+                            var(--bg);
+      color:var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "ヒラギノ角ゴ ProN W3", "Hiragino Kaku Gothic ProN", "メイリオ", Meiryo, "Noto Sans JP", sans-serif;
+      line-height:1.6;
+    }
+    header{
+      position:sticky; top:0; z-index:5;
+      backdrop-filter:saturate(150%) blur(10px);
+      background:linear-gradient(180deg, rgba(16,23,54,.9), rgba(16,23,54,.65));
+      border-bottom:1px solid #26305f;
+    }
+    .container{max-width:1100px; margin:0 auto; padding:16px 20px}
+    .title{
+      display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    }
+    .title h1{margin:0; font-size: clamp(20px, 2.8vw, 30px); letter-spacing:.02em}
+    .badge{font-size:12px; color:#b9c5ff; background:linear-gradient(180deg, #1b2551, #121a3a);
+      padding:6px 10px; border-radius:999px; border:1px solid #2a3570}
+
+    .grid{display:grid; grid-template-columns:1.1fr .9fr; gap:18px}
+    @media (max-width: 980px){ .grid{grid-template-columns:1fr} }
+
+    .card{
+      background:linear-gradient(180deg, var(--panel), var(--panel-2));
+      border:1px solid #212a58; border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .card .head{padding:14px 16px 0; display:flex; align-items:center; justify-content:space-between; gap:12px}
+    .card .body{padding:14px 16px 16px}
+
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .grow{flex:1}
+    .field{position:relative}
+    .field input[type="text"], .field textarea{
+      width:100%; background:#0f1533; border:1px solid #222b5e; color:var(--ink);
+      border-radius:14px; padding:12px 14px; font-size:15px; outline:none;
+      transition:border .15s ease, background .15s ease;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+    .field textarea{min-height:160px; resize:vertical}
+    .field input:focus, .field textarea:focus{border-color:#3551ff}
+    .hint{font-size:12px; color:var(--sub)}
+
+    .chips{display:flex; gap:8px; flex-wrap:wrap}
+    .chip{
+      background:linear-gradient(180deg, #1b2250, #141a42);
+      color:#cfe0ff; border:1px solid #2a3570; border-radius:999px;
+      padding:7px 10px; font-size:12px; cursor:pointer; user-select:none;
+      display:inline-flex; align-items:center; gap:8px;
+    }
+    .chip input{accent-color:#7da9ff}
+
+    .toolbar{position:sticky; bottom:0; z-index:4; margin-top:18px}
+    .toolbar-inner{
+      display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+      background:linear-gradient(180deg, rgba(18,24,60,.95), rgba(10,14,35,.95));
+      border:1px solid #26305f; border-radius: 14px; padding:8px; box-shadow: var(--shadow);
+    }
+    .tok-btn{
+      position:relative; display:inline-flex; align-items:center; gap:8px;
+      padding:10px 12px; border-radius:12px; border:1px solid #29366f; cursor:pointer;
+      background: linear-gradient(180deg,#1c2452,#151c43);
+      color:#d8e2ff; font-size:13px; white-space:nowrap; user-select:none;
+      transition:transform .06s ease, border .2s ease, background .2s ease;
+    }
+    .tok-btn:hover{transform: translateY(-1px); border-color:#3950aa}
+    .tok-btn small{color:#9fb2ff; opacity:.8}
+
+    .pill{display:inline-flex; gap:8px}
+    .btn, button{
+      appearance:none; border:none; cursor:pointer; color:#0b1020;
+      background:linear-gradient(180deg, #93b5ff, #6ea8fe); border-radius:12px; padding:10px 13px;
+      font-weight:700; letter-spacing:.02em; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15), var(--shadow);
+    }
+    .btn.alt{background:linear-gradient(180deg,#303b78,#212a59); color:#d6e2ff}
+    .btn.warn{background:linear-gradient(180deg,#ffd56b,#f9c74f)}
+    .btn.ghost{background:#121a3f; color:#ccdcff; border:1px solid #2a3570; box-shadow: var(--shadow)}
+
+    .result, .replace-out{
+      background:#0b1233; border:1px dashed #2b366c; border-radius:12px; padding:12px; min-height:120px;
+      overflow:auto; white-space:pre-wrap; word-break:break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace
+    }
+    mark{background:linear-gradient(180deg, rgba(79,230,178,.25), rgba(79,230,178,.15));
+         border:1px solid rgba(79,230,178,.35); padding:0 2px; border-radius:4px}
+
+    .stat{display:flex; gap:12px; flex-wrap:wrap; align-items:center; color:#b9c5ff; font-size:13px}
+    .stat .dot{width:10px; height:10px; border-radius:50%}
+    .stat .ok{background:var(--ok)}
+    .stat .bad{background:var(--bad)}
+
+    .list{display:flex; flex-direction:column; gap:8px}
+    .item{background:#101842; border:1px solid #202a5a; border-radius:10px; padding:8px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+
+    .footer{opacity:.7; font-size:12px; text-align:center; padding:16px 0}
+
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#121a3f; padding:2px 6px; border-radius:6px; border:1px solid #2a3570; color:#d6e2ff}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container title">
+      <h1>正規表現 入力補助ツール <span style="opacity:.55;font-weight:500;font-size:.8em">— Realtime Save / Undoable Inserts</span></h1>
+      <span class="badge">IndexedDB 常時保存</span>
+      <span class="badge">長押しで説明</span>
+      <span class="badge">Ctrl+Z/Shift+Ctrl+Z 対応</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <!-- 左：編集パネル -->
+      <section class="card">
+        <div class="head">
+          <div class="row">
+            <strong>パターン</strong>
+            <div class="chips" id="flagChips"></div>
+          </div>
+          <div class="pill">
+            <button class="btn alt" id="copyRegexBtn" title="正規表現を /pattern/flags 形式でコピー">コピー</button>
+            <button class="btn ghost" id="exportBtn" title="状態JSONを書き出し">エクスポート</button>
+            <label class="btn ghost" title="状態JSONを読み込み">
+              インポート<input type="file" id="importFile" accept="application/json" hidden />
+            </label>
+          </div>
+        </div>
+        <div class="body">
+          <div class="field">
+            <input id="pattern" type="text" placeholder="例）^(?:[\\w.-]+)@(?:[\\w-]+\\.)+[A-Za-z]{2,}$" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="hint">選択範囲を <span class="kbd">()</span> や <span class="kbd">[]</span> で囲むなどのスマート挿入に対応。行頭/行末は <span class="kbd">^</span> / <span class="kbd">$</span>。</div>
+
+          <div style="height:10px"></div>
+          <div class="row">
+            <div class="field grow">
+              <label class="hint">テスト文字列</label>
+              <textarea id="testText" placeholder="ここにテスト対象のテキストを入力。マッチはハイライトされます。"></textarea>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div class="field grow">
+              <label class="hint">置換（オプション）</label>
+              <input id="replace" type="text" placeholder="例）$1-$2 などの後方参照" autocomplete="off" spellcheck="false" />
+            </div>
+            <button class="btn" id="doReplace">置換をプレビュー</button>
+          </div>
+
+          <div class="row" style="margin-top:8px; align-items:flex-start">
+            <div class="grow">
+              <div class="stat" id="stat">
+                <span class="dot ok"></span><span id="okText">準備中...</span>
+              </div>
+              <div class="result" id="result" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px">
+            <details>
+              <summary>マッチ詳細 / キャプチャ一覧</summary>
+              <div class="list" id="matchList"></div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右：トークンとヘルプ -->
+      <aside class="card">
+        <div class="head">
+          <strong>入力支援パレット</strong>
+          <button class="btn warn" id="clearAll">すべてクリア</button>
+        </div>
+        <div class="body">
+          <div class="hint">下のボタンは「タップで挿入 / 長押しで説明（alert）」に対応。選択中の文字を賢く囲みます。</div>
+          <div style="height:10px"></div>
+          <div class="toolbar">
+            <div class="toolbar-inner" id="tokenBar" role="toolbar" aria-label="正規表現トークン一覧"></div>
+          </div>
+          <div style="height:10px"></div>
+          <details>
+            <summary>クイックTips</summary>
+            <ul>
+              <li><span class="kbd">Ctrl</span> + <span class="kbd">Z</span> で <b>挿入も含めて</b>取り消し、<span class="kbd">Shift</span> + <span class="kbd">Ctrl</span> + <span class="kbd">Z</span> でやり直し。</li>
+              <li>フラグ <b>g/i/m/s/u/y</b> をトグル。<b>m</b> で ^/$ が行頭・行末になります。</li>
+              <li>スマート挿入：選択があると <code>()</code> や <code>[]</code>、<code>{n,m}</code> で自動で包みます。</li>
+              <li>置換フィールドに後方参照 <code>$1</code> などを使うとプレビューに反映。</li>
+            </ul>
+          </details>
+        </div>
+      </aside>
+    </div>
+
+    <div class="footer">© 2025 Regex Helper — ローカル保存（IndexedDB） / すべてブラウザ内で完結</div>
+  </main>
+
+  <script>
+  // ========= IndexedDB (idb-keyval ライク) =========
+  const DB_NAME = 'regex-helper-db';
+  const DB_STORE = 'state';
+  let db;
+  function openDB(){
+    return new Promise((resolve, reject)=>{
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = (e)=>{
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+  async function idbSet(key, val){ db = db || await openDB(); return new Promise((res, rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); tx.objectStore(DB_STORE).put(val, key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+  async function idbGet(key){ db = db || await openDB(); return new Promise((res, rej)=>{ const tx=db.transaction(DB_STORE,'readonly'); const r=tx.objectStore(DB_STORE).get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+
+  // ========= DOM refs =========
+  const el = {
+    pattern: document.getElementById('pattern'),
+    testText: document.getElementById('testText'),
+    replace: document.getElementById('replace'),
+    result: document.getElementById('result'),
+    matchList: document.getElementById('matchList'),
+    stat: document.getElementById('stat'),
+    okText: document.getElementById('okText'),
+    flagChips: document.getElementById('flagChips'),
+    tokenBar: document.getElementById('tokenBar'),
+    doReplace: document.getElementById('doReplace'),
+    copyRegexBtn: document.getElementById('copyRegexBtn'),
+    clearAll: document.getElementById('clearAll'),
+    exportBtn: document.getElementById('exportBtn'),
+    importFile: document.getElementById('importFile'),
+  };
+
+  // ========= Undo / Redo stack for pattern =========
+  const history = { stack: [], index: -1, push(val, selStart, selEnd){
+      const top = this.stack[this.index];
+      if(top && top.val === val && top.selStart===selStart && top.selEnd===selEnd) return;
+      this.stack = this.stack.slice(0, this.index+1);
+      this.stack.push({ val, selStart, selEnd });
+      this.index = this.stack.length - 1;
+    }, undo(){ if(this.index>0){ this.index--; return this.stack[this.index]; } return null; },
+       redo(){ if(this.index<this.stack.length-1){ this.index++; return this.stack[this.index]; } return null; }
+  };
+  function capture(){ history.push(el.pattern.value, el.pattern.selectionStart, el.pattern.selectionEnd); }
+
+  // ========= Flags =========
+  const flagDefs = [
+    {k:'g', t:'global: 全部検索'},
+    {k:'i', t:'ignoreCase: 大文字小文字無視'},
+    {k:'m', t:'multiline: ^/$ を行頭・行末に'},
+    {k:'s', t:'dotAll: . が\nにも一致'},
+    {k:'u', t:'unicode: Unicode 対応'},
+    {k:'y', t:'sticky: lastIndex からのみ'},
+  ];
+  const flags = new Set();
+  function renderFlags(){
+    el.flagChips.innerHTML = '';
+    flagDefs.forEach(({k,t})=>{
+      const label = document.createElement('label');
+      label.className='chip';
+      label.title=t;
+      const chk = document.createElement('input');
+      chk.type='checkbox';
+      chk.checked=flags.has(k);
+      chk.addEventListener('change', ()=>{ chk.checked?flags.add(k):flags.delete(k); evaluate(); saveStateDebounced(); });
+      label.append(chk, document.createTextNode(` ${k}`));
+      el.flagChips.appendChild(label);
+    });
+  }
+
+  // ========= Token Buttons =========
+  const TOKENS = [
+    { label:'^ 行頭と一致', insert:'^', desc:'文字列や行の先頭にマッチ（mフラグ時）', ex:'^Hello' },
+    { label:'$ 行末と一致', insert:'$', desc:'文字列や行の末尾にマッチ（mフラグ時）', ex:'world$' },
+    { label:'. 任意の1文字', insert:'.', desc:'改行以外の任意の1文字（sフラグで改行も）', ex:'h.t' },
+    { label:'\\d 数字', insert:'\\d', desc:'0-9 の数字に一致', ex:'\\d{3}' },
+    { label:'\\w 単語文字', insert:'\\w', desc:'英数とアンダースコアに一致', ex:'\\w+' },
+    { label:'\\s 空白', insert:'\\s', desc:'空白（スペース/タブ/改行）に一致', ex:'\\s*' },
+    { label:'文字クラス [abc]', insert:'[abc]', desc:'角括弧でいずれか1文字に一致', ex:'gr[ae]y' },
+    { label:'否定文字クラス [^abc]', insert:'[^abc]', desc:'角括弧内以外の1文字に一致', ex:'[^0-9]' },
+    { label:'量指定 *', insert:'*', desc:'直前の要素を0回以上', ex:'a*' },
+    { label:'量指定 +', insert:'+', desc:'直前の要素を1回以上', ex:'a+' },
+    { label:'量指定 ?', insert:'?', desc:'直前の要素を0/1回（最短量指定にも）', ex:'a?' },
+    { label:'量指定 {n}', insert:'{n}', desc:'厳密に n 回', ex:'a{3}' },
+    { label:'量指定 {n,}', insert:'{n,}', desc:'n 回以上', ex:'a{2,}' },
+    { label:'量指定 {n,m}', insert:'{n,m}', desc:'n〜m 回', ex:'a{2,4}' },
+    { label:'グループ ()', insert:'()', desc:'キャプチャグループ', ex:'(foo)bar' },
+    { label:'非捕捉 (?:)', insert:'(?:)', desc:'非キャプチャグループ', ex:'(?:png|jpg)' },
+    { label:'名前付き (?<name>)', insert:'(?<name>)', desc:'名前付きキャプチャ（後方参照 $<name>）', ex:'(?<user>\\w+)@' },
+    { label:'先読み (?=)', insert:'(?=)', desc:'肯定の先読み', ex:'foo(?=bar)' },
+    { label:'否定先読み (?! )', insert:'(?! )', desc:'否定の先読み', ex:'foo(?!bar)' },
+    { label:'先行後読み (?<= )', insert:'(?<= )', desc:'肯定の後読み', ex:'(?<=foo)bar' },
+    { label:'否定後読み (?<! )', insert:'(?<! )', desc:'否定の後読み', ex:'(?<!foo)bar' },
+    { label:'\n 改行', insert:'\\n', desc:'改行に一致', ex:'^line\\n$' },
+    { label:'\t タブ', insert:'\\t', desc:'タブに一致', ex:'col1\\tcol2' },
+    { label:'\b 単語境界', insert:'\\b', desc:'単語の境界に一致', ex:'\\bcat\\b' },
+    { label:'\B 非単語境界', insert:'\\B', desc:'単語境界以外に一致', ex:'\\Bcat' },
+    { label:'| いずれか', insert:'|', desc:'オルタネーション（いずれか）', ex:'cat|dog' },
+    { label:'エスケープ \\', insert:'\\\
+', desc:'特殊文字のエスケープ', ex:'\\.' },
+  ];
+
+  function makeTokenButtons(){
+    el.tokenBar.innerHTML='';
+    TOKENS.forEach((t)=>{
+      const b = document.createElement('button');
+      b.className='tok-btn';
+      const small = document.createElement('small');
+      small.textContent = t.insert;
+      b.append(document.createTextNode(t.label+' ' + t.desc), small);
+
+      let longPressTimer=null; let longPressed=false;
+      const start = ()=>{ longPressed=false; longPressTimer=setTimeout(()=>{ longPressed=true; alert(`${t.label}\n\n説明: ${t.desc}\n例: ${t.ex}`); }, 650); };
+      const cancel = ()=>{ clearTimeout(longPressTimer); };
+      b.addEventListener('mousedown', start);
+      b.addEventListener('touchstart', start, {passive:true});
+      ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=> b.addEventListener(ev, cancel));
+      b.addEventListener('click', (e)=>{
+        if(longPressed) return; // 長押しなら挿入しない
+        smartInsert(t.insert);
+      });
+      el.tokenBar.appendChild(b);
+    });
+  }
+
+  // ========= Smart Insert with undo =========
+  function smartInsert(text){
+    const inp = el.pattern;
+    inp.focus();
+    const s = inp.selectionStart, e = inp.selectionEnd;
+    const selected = inp.value.slice(s,e);
+
+    let insertText = text;
+    // 包む系
+    if(text === '()' || text === '(?:)' || text === '(?<name>)' || text==='[]' || text==='{}' || /^\{\d.*\}$/.test(text)){
+      const [left,right] = (()=>{
+        if(text==='()') return ['(',')'];
+        if(text==='(?:)') return ['(?:',')'];
+        if(text==='(?<name>)') return ['(?<name>',')'];
+        if(text==='[]') return ['[',']'];
+        if(/^\{\d.*\}$/.test(text)) return ['', text];
+        return ['{','}'];
+      })();
+      insertText = selected ? left + selected + right : left + right;
+      // カーソル位置を中身へ
+      const cur = selected ? (s + left.length + selected.length) : (s + left.length);
+      applyInsert(insertText, s, e, selected? cur : (s + left.length));
+      return;
+    }
+
+    // デフォルト：そのまま挿入
+    applyInsert(insertText, s, e, s + insertText.length);
+  }
+
+  function applyInsert(text, start, end, caret){
+    // 取り消し可能にするため、履歴に現状を先に積む
+    capture();
+    // setRangeText で置換（これ自体は undo スタックに積まれないので自前管理）
+    const inp = el.pattern; const val = inp.value;
+    inp.value = val.slice(0,start) + text + val.slice(end);
+    inp.setSelectionRange(caret, caret);
+    // 新状態も履歴に積む
+    capture();
+    evaluate(); saveStateDebounced();
+  }
+
+  // ========= Evaluate =========
+  function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+  function buildRegex(){
+    const pat = el.pattern.value;
+    const flg = Array.from(flags).join('');
+    try{
+      const re = new RegExp(pat, flg);
+      return { re, error:null };
+    }catch(err){ return { re:null, error: err.message }; }
+  }
+  function evaluate(){
+    const { re, error } = buildRegex();
+    const text = el.testText.value;
+    el.matchList.innerHTML='';
+
+    if(error){
+      el.okText.innerHTML = `<b style="color:var(--bad)">エラー:</b> ${escapeHtml(error)}`;
+      el.result.innerHTML = escapeHtml(text);
+      return;
+    }
+
+    el.okText.textContent = `OK / フラグ: ${Array.from(flags).join('') || '(なし)'} `;
+
+    if(!text){ el.result.textContent=''; return; }
+
+    // マッチハイライト
+    const g = /g/.test(Array.from(flags).join(''));
+    let output = '';
+    try{
+      if(!g){
+        const m = text.match(re);
+        if(!m){ el.result.textContent=text; setStat(0); return; }
+        const idx = m.index ?? text.indexOf(m[0]);
+        output = escapeHtml(text.slice(0, idx)) + '<mark>' + escapeHtml(m[0]) + '</mark>' + escapeHtml(text.slice(idx + m[0].length));
+        setStat(1, [m]);
+      } else {
+        // 全件
+        const matches=[]; let lastIndex=0; let m;
+        re.lastIndex = 0;
+        while((m = re.exec(text))){
+          matches.push(m);
+          const start = m.index;
+          const end = start + (m[0]?.length || 0);
+          output += escapeHtml(text.slice(lastIndex, start)) + '<mark>' + escapeHtml(m[0]) + '</mark>';
+          lastIndex = end;
+          if(m[0]==='') { re.lastIndex++; } // 無限ループ対策
+        }
+        output += escapeHtml(text.slice(lastIndex));
+        setStat(matches.length, matches);
+      }
+      el.result.innerHTML = output;
+    }catch(err){
+      el.okText.innerHTML = `<b style="color:var(--bad)">評価エラー:</b> ${escapeHtml(err.message)}`;
+      el.result.textContent = text;
+    }
+  }
+
+  function setStat(count, matches=[]){
+    const frag = document.createDocumentFragment();
+    el.matchList.innerHTML='';
+    const head = document.createElement('div');
+    head.className='item';
+    head.textContent = `マッチ数: ${count}`;
+    el.matchList.appendChild(head);
+    matches.forEach((m, i)=>{
+      const it = document.createElement('div');
+      it.className='item';
+      const groups = m.groups ? JSON.stringify(m.groups) : '{}';
+      it.textContent = `#${i+1} [${m.index}..${m.index + (m[0]?.length||0)}]  ->  ${m[0]}  groups=${groups}`;
+      el.matchList.appendChild(it);
+    });
+  }
+
+  // ========= Replace Preview =========
+  el.doReplace.addEventListener('click', ()=>{
+    const { re, error } = buildRegex();
+    if(error){ alert('正規表現エラー: '+error); return; }
+    const text = el.testText.value;
+    const rep = el.replace.value;
+    try{
+      // 置換は g なしでも1回だけ行われる（JS仕様）。
+      const out = text.replace(re, rep);
+      const pre = document.createElement('pre');
+      pre.className = 'replace-out';
+      pre.textContent = out;
+      // 既存があれば置換
+      const exist = document.querySelector('.replace-out');
+      if(exist) exist.replaceWith(pre); else el.result.insertAdjacentElement('afterend', pre);
+    }catch(err){ alert('置換エラー: '+err.message); }
+  });
+
+  // ========= Copy =========
+  el.copyRegexBtn.addEventListener('click', async ()=>{
+    const flg = Array.from(flags).join('');
+    const s = `/${el.pattern.value}/${flg}`;
+    try{ await navigator.clipboard.writeText(s); el.copyRegexBtn.textContent='コピー済み'; setTimeout(()=>el.copyRegexBtn.textContent='コピー', 1200);}catch{ alert('クリップボードに書き込めませんでした'); }
+  });
+
+  // ========= Clear =========
+  el.clearAll.addEventListener('click', ()=>{
+    if(!confirm('すべてクリアしますか？（保存された状態も空になります）')) return;
+    el.pattern.value=''; el.testText.value=''; el.replace.value=''; flags.clear(); renderFlags(); capture(); evaluate(); saveStateDebounced();
+  });
+
+  // ========= Export / Import =========
+  el.exportBtn.addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(snapshot(), null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'regex-helper-state.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  el.importFile.addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const txt = await file.text();
+    try{
+      const st = JSON.parse(txt);
+      applySnapshot(st);
+      await saveState();
+    }catch(err){ alert('読み込みエラー: '+err.message); }
+    e.target.value='';
+  });
+
+  // ========= Save / Load =========
+  function snapshot(){
+    return {
+      pattern: el.pattern.value,
+      flags: Array.from(flags),
+      testText: el.testText.value,
+      replace: el.replace.value,
+      ts: Date.now()
+    };
+  }
+  async function saveState(){ await idbSet('current', snapshot()); }
+  let saveTimer=null; function saveStateDebounced(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveState, 300); }
+
+  async function loadState(){
+    const st = await idbGet('current');
+    if(st){ applySnapshot(st); }
+  }
+  function applySnapshot(st){
+    el.pattern.value = st.pattern || '';
+    flags.clear(); (st.flags||[]).forEach(f=>flags.add(f));
+    renderFlags();
+    el.testText.value = st.testText || '';
+    el.replace.value = st.replace || '';
+    evaluate();
+    // 初期履歴
+    capture();
+  }
+
+  // ========= Listeners =========
+  ['input','change','keyup'].forEach(ev=>{
+    el.pattern.addEventListener(ev, ()=>{ evaluate(); saveStateDebounced(); capture(); });
+    el.testText.addEventListener(ev, ()=>{ evaluate(); saveStateDebounced(); });
+    el.replace.addEventListener(ev, ()=>{ saveStateDebounced(); });
+  });
+
+  // Ctrl+Z / Ctrl+Shift+Z を自前実装（挿入も含めて取り消し）
+  el.pattern.addEventListener('keydown', (e)=>{
+    const mac = navigator.platform.toLowerCase().includes('mac');
+    const mod = mac? e.metaKey : e.ctrlKey;
+    if(mod && !e.altKey && e.key.toLowerCase()==='z'){
+      e.preventDefault();
+      if(e.shiftKey){ const st = history.redo(); if(st){ el.pattern.value=st.val; el.pattern.setSelectionRange(st.selStart, st.selEnd); evaluate(); saveStateDebounced(); } }
+      else { const st = history.undo(); if(st){ el.pattern.value=st.val; el.pattern.setSelectionRange(st.selStart, st.selEnd); evaluate(); saveStateDebounced(); } }
+    }
+  });
+
+  // ========= Init =========
+  (async function init(){
+    renderFlags();
+    makeTokenButtons();
+    await loadState();
+    evaluate();
+    // もし空ならデモを入れる
+    if(!el.pattern.value && !el.testText.value){
+      el.pattern.value = '^(?<user>[\\w.-]+)@(?<host>[\\w-]+\\.)+[A-Za-z]{2,}$';
+      flags.clear(); ['g','m'].forEach(f=>flags.add(f)); renderFlags();
+      el.testText.value = `foo@example.com\nnot-an-email\nbar.baz@sub.domain.co.jp`;
+      el.replace.value = '$<user>@***.$<tld>';
+      capture(); evaluate(); saveState();
+    } else { capture(); }
+  })();
+
+  // ========= Small UX niceties =========
+  // タブキーで \t を挿入（pattern フィールド）
+  el.pattern.addEventListener('keydown', (e)=>{
+    if(e.key==='Tab'){
+      e.preventDefault(); smartInsert('\\t');
+    }
+  });
+
+  // ダブルクリックで全選択
+  [el.pattern, el.testText, el.replace].forEach(o=>{
+    o.addEventListener('dblclick', ()=>{ o.select(); });
+  });
+  </script>
+</body>
+</html>
